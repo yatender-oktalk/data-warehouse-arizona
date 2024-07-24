@@ -1,5 +1,7 @@
 # README
 
+## Week 3 Assignment
+
 ## Instructions for Setting Up MySQL with Docker-Compose
 
 ### Prerequisites
