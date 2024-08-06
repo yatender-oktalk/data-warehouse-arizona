@@ -10,8 +10,10 @@ services:
       MYSQL_DATABASE: example_db
       MYSQL_USER: user
       MYSQL_PASSWORD: user_password
+      MYSQL_LOCAL_INFILE: 1
     volumes:
       - mysql-data:/var/lib/mysql
+      - /Users/ysingh/Downloads/mysql_files_csv:/var/lib/mysql-files
     ports:
       - "3306:3306"
 

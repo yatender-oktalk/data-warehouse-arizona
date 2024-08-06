@@ -1,0 +1,99 @@
+
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS Customer.PrCustomerChurn //
+
+CREATE PROCEDURE Customer.PrCustomerChurn()
+proc_label: BEGIN
+  DECLARE VarCurrentTimestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+  DECLARE VarSourceRowCount INT DEFAULT 0;
+  DECLARE VarTargetRowCount INT DEFAULT 0;
+  DECLARE VarThresholdNbr INT DEFAULT 0;
+  DECLARE VarTinyIntVal TINYINT;
+
+  -- Debug point 1
+  SELECT 'Debug 1: Starting procedure' AS DebugMessage;
+
+  SELECT COUNT(*) INTO VarSourceRowCount FROM Customer.CustomerChurn_Stage;
+  SELECT COUNT(*) INTO VarTargetRowCount FROM Customer.CustomerChurn;
+
+  -- Debug point 2
+  SELECT 'Debug 2: After counting rows' AS DebugMessage, VarSourceRowCount, VarTargetRowCount;
+
+  -- Calculate threshold
+  SET VarThresholdNbr = CAST((VarTargetRowCount * 0.2) AS UNSIGNED);
+
+  -- Debug point 3
+  SELECT 'Debug 3: Calculated threshold' AS DebugMessage, VarThresholdNbr;
+
+  -- Check if source count is less than threshold
+  IF VarSourceRowCount < VarThresholdNbr THEN
+    SELECT 'Debug 4: Source count less than threshold' AS DebugMessage;
+    SET VarTinyIntVal = -129;
+    -- Exit the procedure here if this condition is met
+    SELECT 'Exiting procedure due to insufficient source data' AS Result;
+    LEAVE proc_label;
+  END IF;
+
+  -- Debug point 5
+  SELECT 'Debug 5: Before DELETE operation' AS DebugMessage;
+
+  -- DELETE operation (corrected version)
+  DELETE TrgtTbl FROM Customer.CustomerChurn AS TrgtTbl
+  LEFT JOIN Customer.CustomerChurn_Stage AS ST ON TrgtTbl.CustomerId = ST.CustomerId
+  WHERE ST.CustomerId IS NULL;
+
+  -- Debug point 6
+  SELECT 'Debug 6: Before UPDATE operation' AS DebugMessage;
+
+  -- UPDATE operation
+  UPDATE Customer.CustomerChurn AS TrgtTbl
+  INNER JOIN Customer.CustomerChurn_Stage AS SrcTbl ON TrgtTbl.CustomerId = SrcTbl.CustomerId
+  SET 
+    TrgtTbl.Surname = SrcTbl.Surname,
+    TrgtTbl.CreditScore = SrcTbl.CreditScore,
+    TrgtTbl.Geography = SrcTbl.Geography,
+    TrgtTbl.Gender = SrcTbl.Gender,
+    TrgtTbl.Age = SrcTbl.Age,
+    TrgtTbl.Balance = SrcTbl.Balance,
+    TrgtTbl.Exited = SrcTbl.Exited,
+    TrgtTbl.ChangeDtm = VarCurrentTimestamp
+  WHERE 
+    COALESCE(TrgtTbl.Surname,'') <> COALESCE(SrcTbl.Surname,'')
+    OR COALESCE(TrgtTbl.CreditScore,0) <> COALESCE(SrcTbl.CreditScore,0)
+    OR COALESCE(TrgtTbl.Geography,'') <> COALESCE(SrcTbl.Geography,'')
+    OR COALESCE(TrgtTbl.Gender,'') <> COALESCE(SrcTbl.Gender,'')
+    OR COALESCE(TrgtTbl.Age,0) <> COALESCE(SrcTbl.Age,0)
+    OR COALESCE(TrgtTbl.Balance,0) <> COALESCE(SrcTbl.Balance,0)
+    OR COALESCE(TrgtTbl.Exited,0) <> COALESCE(SrcTbl.Exited,0);
+
+  -- Debug point 7
+  SELECT 'Debug 7: Before INSERT operation' AS DebugMessage;
+
+  -- INSERT operation
+  INSERT INTO Customer.CustomerChurn
+  (CustomerId, Surname, CreditScore, Geography, Gender, Age, Balance, Exited, SourceSystemNm, CreateAgentId, CreateDtm, ChangeAgentId, ChangeDtm)
+  SELECT 
+    SrcTbl.CustomerId,
+    SrcTbl.Surname,
+    SrcTbl.CreditScore,
+    SrcTbl.Geography,
+    SrcTbl.Gender,
+    SrcTbl.Age,
+    SrcTbl.Balance,
+    SrcTbl.Exited,
+    'Kaggle-CSV' AS SourceSystemNm,
+    CURRENT_USER() AS CreateAgentId,
+    VarCurrentTimestamp AS CreateDtm,
+    CURRENT_USER() AS ChangeAgentId,
+    VarCurrentTimestamp AS ChangeDtm
+  FROM Customer.CustomerChurn_Stage AS SrcTbl
+  LEFT OUTER JOIN Customer.CustomerChurn AS TT ON SrcTbl.CustomerId = TT.CustomerId
+  WHERE TT.CustomerId IS NULL;
+
+  -- Final debug point
+  SELECT 'Debug 8: Procedure completed' AS DebugMessage;
+
+END //
+
+DELIMITER ;
